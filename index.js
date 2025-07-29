@@ -1,34 +1,40 @@
-const express = require("express");
+const express = require('express');
+const bodyParser = require('body-parser');
+const { WebhookClient } = require('dialogflow-fulfillment');
+const MessagingResponse = require('twilio').twiml.MessagingResponse;
+
 const app = express();
+app.use(bodyParser.urlencoded({ extended: false }));
 
-app.use(express.json());
+app.post('/webhook', (req, res) => {
+  const twiml = new MessagingResponse();
+  const agent = new WebhookClient({ request: req, response: res });
 
-app.post("/", (req, res) => {
-  const msg = req.body.queryResult.queryText;
-  let response = "No entendí tu consulta 🤔";
-
-  if (msg.includes("alojamiento")) {
-    response = "🛏️ Alojamiento: https://sites.google.com/view/riocoloradoturismo/alojamientos";
-  } else if (msg.includes("actividad")) {
-    response = "🎯 Actividades: https://sites.google.com/view/riocoloradoturismo/actividades";
-  } else if (msg.includes("mapa")) {
-    response = "🗺️ Mapas: https://sites.google.com/view/riocoloradoturismo/mapas-folletos";
-  } else if (msg.includes("consulta")) {
-    response = "ℹ️ Más info: https://sites.google.com/view/riocoloradoturismo/inicio";
-  } else if (msg.includes("hablar")) {
-    const ahora = new Date();
-    const dia = ahora.getDay();
-    const hora = ahora.getHours() + ahora.getMinutes() / 60;
-    const esLaboral = dia >= 1 && dia <= 5 && hora >= 6.5 && hora <= 13;
-    const esFinde = (dia === 0 || dia === 6) && hora >= 11 && hora <= 19;
-    response = esLaboral || esFinde
-      ? "👩‍💼 Un agente se comunicará con vos en breve."
-      : "⏱️ Horario de atención:\nLunes a Viernes: 6:30 a 13:00\nSábados, Domingos y Feriados: 11:00 a 19:00";
-  } else if (msg.includes("encuesta")) {
-    response = "📋 Encuesta:\nhttps://docs.google.com/forms/d/e/1FAIpQLScW31w-fpZSnJ-BQdX9RYBIX-zKfUUzNifyG70jAvW51oQXFw/viewform";
+  function welcome(agent) {
+    agent.add('Hola! Soy RC Turismo, ¿en qué puedo ayudarte?');
   }
 
-  res.json({ fulfillmentText: response });
+  function fallback(agent) {
+    agent.add('No entendí eso, ¿podés repetir?');
+  }
+
+  let intentMap = new Map();
+  intentMap.set('Default Welcome Intent', welcome);
+  intentMap.set('Default Fallback Intent', fallback);
+  // Aquí podés agregar más intents personalizados
+
+  agent.handleRequest(intentMap)
+    .then(() => {
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(twiml.toString());
+    })
+    .catch(err => {
+      console.error(err);
+      res.status(500).send('Error en el webhook');
+    });
 });
 
-app.listen(3000, () => console.log("Bot RC Turismo corriendo en puerto 3000"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Bot RC Turismo corriendo en puerto ${PORT}`);
+});
